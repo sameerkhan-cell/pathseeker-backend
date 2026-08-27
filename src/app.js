@@ -59,7 +59,10 @@ app.use("/api/admin/notifications", notificationRoutes.adminRouter);
 app.use("/api/admin", adminRoutes);
 
 // Uploaded files (read-only access)
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Only serve local uploads in non-Vercel environments (Vercel filesystem is read-only)
+if (!process.env.VERCEL) {
+  app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+}
 
 app.use(notFoundHandler);
 app.use(errorHandler);

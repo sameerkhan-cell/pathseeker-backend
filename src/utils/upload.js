@@ -1,0 +1,53 @@
+const multer = require("multer");
+const crypto = require("crypto");
+const path = require("path");
+const fs = require("fs");
+
+const { env } = require("../config/env");
+
+const UPLOAD_ROOT = path.join(__dirname, "../../uploads");
+
+/**
+ * Shared uploader factory (Phase 4 pattern).
+ * - randomized filenames (client filename never trusted)
+ * - extension allowlist
+ * - size cap from env.maxFileSizeMb
+ */
+function makeUploader({ subdir, allowExts }) {
+  const dir = path.join(UPLOAD_ROOT, subdir);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, dir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `u${req.user?.id ?? "anon"}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`);
+    },
+  });
+
+  const fileFilter = (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowExts.includes(ext)) {
+      const err = new Error(`Only ${allowExts.join(", ")} files are allowed`);
+      err.status = 400;
+      return cb(err);
+    }
+    cb(null, true);
+  };
+
+  const limits = { fileSize: env.maxFileSizeMb * 1024 * 1024 };
+  const raw = multer({ storage, fileFilter, limits });
+
+  // Wraps multer errors into clean 4xx responses
+  return (req, res, next) => {
+    raw.single("file")(req, res, (err) => {
+      if (!err) return next();
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ success: false, message: `File exceeds the ${env.maxFileSizeMb}MB limit` });
+      }
+      return res.status(err.status || 400).json({ success: false, message: err.message || "Upload failed" });
+    });
+  };
+}
+
+module.exports = { makeUploader, UPLOAD_ROOT };

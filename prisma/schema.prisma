@@ -1,0 +1,416 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Role {
+  STUDENT
+  GRADUATE
+  PROFESSIONAL
+  ADMIN
+}
+
+enum DemandLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum MediaType {
+  VIDEO
+  PODCAST
+  ANIMATED_EXPLAINER
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum ResourceType {
+  PDF
+  CHECKLIST
+  INFOGRAPHIC
+}
+
+enum StoryStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BookmarkItemType {
+  CAREER
+  MEDIA
+  RESOURCE
+  STORY
+}
+
+enum FeedbackType {
+  BUG
+  SUGGESTION
+  QUERY
+}
+
+enum FeedbackStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum OtpPurpose {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+enum QuizStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  LIKERT
+  SLIDER
+}
+
+// ============ CORE ============
+
+model User {
+  id             Int      @id @default(autoincrement())
+  name           String   @db.VarChar(100)
+  email          String   @unique @db.VarChar(191)
+  passwordHash   String   @db.VarChar(255)
+  role           Role     @default(STUDENT)
+  isEmailVerified Boolean @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  profile         Profile?
+  otpTokens       OtpToken[]
+  quizAttempts    QuizAttempt[]
+  bookmarks       Bookmark[]
+  feedbacks       Feedback[]
+  notifications   Notification[]
+  recentlyViewed  RecentlyViewed[]
+  savedFilters    SavedFilter[]
+  mediaRatings    MediaRating[]
+  successStories  SuccessStory[]
+
+  @@map("users")
+}
+
+model Profile {
+  id              Int     @id @default(autoincrement())
+  userId          Int     @unique @map("user_id")
+  phone           String? @db.VarChar(20)
+  bio             String? @db.Text
+  educationLevel  String? @db.VarChar(100)
+  fieldOfStudy    String? @db.VarChar(100)
+  institution     String? @db.VarChar(150)
+  graduationYear  Int?
+  skills          String? @db.Text
+  interests       String? @db.Text
+  experienceYears Int?
+  currentRole     String? @db.VarChar(100)
+  resumeUrl       String? @db.VarChar(255)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ============ CAREER BANK ============
+
+model Career {
+  id             Int         @id @default(autoincrement())
+  title          String      @db.VarChar(150)
+  domain         String      @db.VarChar(100)
+  description    String      @db.Text
+  requiredSkills String      @db.Text
+  educationPath  String?     @db.Text
+  salaryMin      Int?
+  salaryMax      Int?
+  demandLevel    DemandLevel @default(MEDIUM)
+  growthOutlook  String?     @db.Text
+  relatedCareers String?     @db.Text
+  tags           String?     @db.Text
+  isActive       Boolean     @default(true)
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  bookmarks       Bookmark[]
+  recentlyVieweds RecentlyViewed[]
+
+  @@index([domain])
+  @@map("careers")
+}
+
+// ============ QUIZ ============
+
+model Quiz {
+  id              Int        @id @default(autoincrement())
+  title           String     @db.VarChar(150)
+  description     String?    @db.Text
+  category        String     @db.VarChar(100)
+  durationMinutes Int        @default(15)
+  status          QuizStatus @default(DRAFT)
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id           Int          @id @default(autoincrement())
+  quizId       Int          @map("quiz_id")
+  type         QuestionType @default(MULTIPLE_CHOICE)
+  questionText String       @db.Text @map("question_text")
+  // JSON array: [{ id: "o1", text: "...", weight: 10 }, ...] for MC/LIKERT
+  options      String       @db.Text
+  sliderMin    Int?         @map("slider_min")
+  sliderMax    Int?         @map("slider_max")
+  sliderStep   Int?         @map("slider_step")
+  order        Int          @default(0)
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id             Int      @id @default(autoincrement())
+  userId         Int      @map("user_id")
+  quizId         Int      @map("quiz_id")
+  answers        String   @db.Text
+  score          Int
+  totalQuestions Int      @map("total_questions")
+  recommendations String? @db.Text
+  timedOut       Boolean  @default(false) @map("timed_out")
+  completedAt    DateTime @default(now()) @map("completed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz Quiz @relation(fields: [quizId], references: [id])
+
+  @@index([userId])
+  @@map("quiz_attempts")
+}
+
+// ============ MULTIMEDIA ============
+
+model Media {
+  id           Int           @id @default(autoincrement())
+  title        String        @db.VarChar(150)
+  type         MediaType
+  url          String        @db.VarChar(500)
+  thumbnailUrl String?       @db.VarChar(500)
+  category     String        @db.VarChar(100)
+  transcript   String?       @db.Text
+  tags         String?       @db.Text
+  status       PublishStatus @default(DRAFT)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  ratings MediaRating[]
+  bookmarks Bookmark[]
+  recentlyVieweds RecentlyViewed[]
+
+  @@map("media")
+}
+
+model MediaRating {
+  id        Int      @id @default(autoincrement())
+  mediaId   Int      @map("media_id")
+  userId    Int      @map("user_id")
+  rating    Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaId, userId])
+  @@map("media_ratings")
+}
+
+// ============ SUCCESS STORIES ============
+
+model SuccessStory {
+  id              Int          @id @default(autoincrement())
+  userId          Int          @map("user_id")
+  title           String       @db.VarChar(150)
+  domain          String       @db.VarChar(100)
+  educationPath   String       @db.Text @map("education_path")
+  challenges      String       @db.Text
+  outcome         String       @db.Text
+  status          StoryStatus  @default(PENDING)
+  reviewedAt      DateTime?    @map("reviewed_at")
+  rejectionReason String?      @db.VarChar(255)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  recentlyVieweds RecentlyViewed[]
+  bookmarks Bookmark[]
+
+  @@index([status])
+  @@map("success_stories")
+}
+
+// ============ RESOURCE LIBRARY ============
+
+model Resource {
+  id            String       @id @default(cuid())
+  title         String       @db.VarChar(150)
+  description   String?      @db.Text
+  type          ResourceType @default(PDF)
+  audience      String       @db.VarChar(100)
+  tags          String?      @db.Text
+  fileUrl       String       @db.VarChar(500) @map("file_url")
+  previewUrl    String?      @db.VarChar(500) @map("preview_url")
+  downloadCount Int          @default(0) @map("download_count")
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  bookmarks Bookmark[]
+  recentlyVieweds RecentlyViewed[]
+
+  @@map("resources")
+}
+
+// ============ BOOKMARKS ============
+
+model Bookmark {
+  id       Int              @id @default(autoincrement())
+  userId   Int              @map("user_id")
+  itemType BookmarkItemType @map("item_type")
+  careerId Int?
+  mediaId  Int?
+  resourceId String?
+  storyId  Int?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  career    Career?       @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  media     Media?        @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  resource  Resource?     @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  story     SuccessStory? @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  notes     BookmarkNote[]
+
+  @@unique([userId, itemType, careerId, mediaId, resourceId])
+  @@map("bookmarks")
+}
+
+model BookmarkNote {
+  id         Int      @id @default(autoincrement())
+  bookmarkId Int      @map("bookmark_id")
+  note       String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  bookmark Bookmark @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+
+  @@map("bookmark_notes")
+}
+
+// ============ FEEDBACK ============
+
+model Feedback {
+  id            Int             @id @default(autoincrement())
+  userId        Int             @map("user_id")
+  type          FeedbackType
+  subject       String?         @db.VarChar(150)
+  message       String          @db.Text
+  status        FeedbackStatus  @default(OPEN)
+  adminResponse String?         @db.Text @map("admin_response")
+  respondedAt   DateTime?       @map("responded_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("feedbacks")
+}
+
+// ============ NOTIFICATIONS ============
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      String?  @db.VarChar(50)
+  title     String   @db.VarChar(150)
+  message   String   @db.Text
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ============ ACTIVITY TRACKING ============
+
+model RecentlyViewed {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  itemType  BookmarkItemType @map("item_type")
+  careerId  Int?
+  mediaId   Int?
+  resourceId String?
+  storyId   Int?
+  viewedAt  DateTime @default(now()) @map("viewed_at")
+
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  career  Career?   @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  media   Media?    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  resource Resource? @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  story   SuccessStory? @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType, careerId, mediaId, resourceId])
+  @@map("recently_viewed")
+}
+
+model SavedFilter {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  name        String   @db.VarChar(100)
+  filterJson  String   @db.Text @map("filter_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("saved_filters")
+}
+
+// ============ AUTH SUPPORT ============
+
+model OtpToken {
+  id         Int        @id @default(autoincrement())
+  userId     Int        @map("user_id")
+  codeHash   String     @db.VarChar(255) @map("code_hash")
+  purpose    OtpPurpose
+  expiresAt  DateTime   @map("expires_at")
+  consumedAt DateTime?  @map("consumed_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("otp_tokens")
+}
+

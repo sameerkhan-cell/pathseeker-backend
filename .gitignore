@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Build / generated
+dist/
+
+# Uploads (user-generated content, should not be in git)
+uploads/
+
+# Prisma generated client
+prisma/generated/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+*.log
+
+# Editor directories and files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

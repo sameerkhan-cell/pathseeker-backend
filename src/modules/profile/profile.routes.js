@@ -11,14 +11,27 @@ const v = require("./profile.validation");
 
 const { env } = require("../../config/env");
 
-const RESUME_DIR = path.join(__dirname, "../../../uploads", "resumes");
-if (!fs.existsSync(RESUME_DIR)) fs.mkdirSync(RESUME_DIR, { recursive: true });
+// On Vercel Serverless, only /tmp is writable. On local, use project uploads.
+const IS_VERCEL = process.env.VERCEL === "1";
+const UPLOAD_ROOT = IS_VERCEL ? "/tmp/uploads" : path.join(__dirname, "../../../uploads");
+const RESUME_DIR = path.join(UPLOAD_ROOT, "resumes");
+
+// DO NOT mkdirSync here at module load — Vercel filesystem is read-only.
+// Create lazily inside multer destination callback instead.
 
 const ALLOWED_EXT = new Set([".pdf", ".doc", ".docx"]);
 const MAX_SIZE_BYTES = env.maxFileSizeMb * 1024 * 1024;
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, RESUME_DIR),
+  destination: (_req, _file, cb) => {
+    // Lazy creation — only runs on actual upload request
+    try {
+      if (!fs.existsSync(RESUME_DIR)) fs.mkdirSync(RESUME_DIR, { recursive: true });
+      cb(null, RESUME_DIR);
+    } catch (err) {
+      cb(err);
+    }
+  },
   filename: (req, file, cb) => {
     // Never trust client filename for storage; keep only a sanitized extension
     const ext = path.extname(file.originalname).toLowerCase();
